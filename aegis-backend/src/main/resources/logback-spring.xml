@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- ── Console appender with structured format ──────────────────── -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [traceId=%X{traceId:-N/A}] %-5level %logger{36} — %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ── File appender (JSON-like structured logs) ────────────────── -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/aegis-backend.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/aegis-backend.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>{"ts":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSZ}","level":"%level","traceId":"%X{traceId:-}","logger":"%logger{36}","thread":"%thread","msg":"%replace(%msg){'\"','\\\"'}"}%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ── Aegis agent package at DEBUG for trace data ──────────────── -->
+    <logger name="com.aegis.backend.agent" level="DEBUG" />
+    <logger name="com.aegis.backend.config" level="INFO" />
+
+    <!-- ── Reduce noise from frameworks ─────────────────────────────── -->
+    <logger name="org.springframework" level="WARN" />
+    <logger name="org.apache" level="WARN" />
+    <logger name="dev.langchain4j" level="INFO" />
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
+    </root>
+
+</configuration>

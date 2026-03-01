@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./aegis-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY} # Passed from host environment
+    networks:
+      - aegis-network
+
+  frontend:
+    build:
+      context: ./aegis-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "5173:80" # Map 5173 as well for convenience
+    networks:
+      - aegis-network
+    depends_on:
+      - backend
+
+networks:
+  aegis-network:
+    driver: bridge
