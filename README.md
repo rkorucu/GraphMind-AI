@@ -464,6 +464,4 @@ aegis-multi-agent/
 
 ---
 
-## License
-
-MIT
+Still learning. Still building. 🚀
