@@ -2,7 +2,7 @@
 
 **A graph-based multi-agent AI orchestration platform for structured decision-making.**
 
-Built with Java 21, Spring Boot 3, LangGraph4j, and React. Designed for production environments where single-prompt LLM calls are insufficient and complex analytical workflows require coordinated, validated, multi-step reasoning.
+Built with Java 21, Spring Boot 3, LangGraph4j, and React. Designed for production environments where complex analytical workflows require coordinated, validated, multi-step reasoning — and where the set of agents, tools, and graph topologies must evolve without rewriting core infrastructure.
 
 ---
 
@@ -15,7 +15,7 @@ Most LLM-powered applications follow a trivial pattern: accept a prompt, call a 
 - **Bounded reasoning loops** — without explicit control flow, reflection-based architectures either loop infinitely or never self-correct.
 - **Deterministic grounding** — LLMs hallucinate. Financial projections, market data, and risk scores must come from deterministic sources.
 
-Aegis Orchestrator solves this by decomposing complex queries into a **directed acyclic graph of specialized agents**, each with a defined role, validated output schema, and access to deterministic tool pipelines.
+Aegis Orchestrator solves this by decomposing complex queries into a **directed graph of specialized agents**, each with a defined role, validated output schema, and access to deterministic tool pipelines. The architecture is designed so that new agents, tools, and graph topologies can be added without modifying existing components.
 
 ---
 
@@ -138,6 +138,8 @@ public class AegisState {
 
 Each node reads from the state, writes its output back, and the graph engine manages propagation. There is no direct inter-agent communication — all coordination flows through shared state.
 
+**Extending the state:** Adding a new agent only requires adding its output field to `AegisState` and registering the corresponding node in the graph configuration. Existing agents remain untouched.
+
 ---
 
 ## Reflection Loop Control
@@ -172,6 +174,8 @@ LLMs hallucinate. For financial projections, market analysis, and risk scoring, 
 | `RiskScoringTool`         | Computes composite risk scores from weighted factors    | Deterministic JSON |
 
 These tools are **not LLM-generated**. They execute fixed business logic and return structured data that agents incorporate into their reasoning. This eliminates hallucinated statistics and grounds the analysis in verifiable computations.
+
+**Adding new tools:** Implement a standard Java class that returns structured JSON. Register it in the Spring context. Any agent can then reference the tool — no framework changes required. The tool interface is intentionally minimal to lower the cost of adding domain-specific capabilities (e.g., regulatory lookup, sentiment scoring, external API adapters).
 
 ---
 
@@ -297,6 +301,70 @@ The system includes a built-in evaluation module that benchmarks pipeline qualit
 4. Aggregate statistics are computed and exposed via `GET /api/agent/eval`
 
 This provides a repeatable, automated mechanism for measuring system quality after model changes, prompt modifications, or agent refactoring.
+
+---
+
+## Extensibility & Modular Expansion
+
+The system is designed around a small set of contracts that make expansion straightforward:
+
+### Adding a New Agent
+
+1. Create a class extending `BaseAgent` with a system prompt and output schema.
+2. Add a validator method in `AgentOutputValidator` for the new schema.
+3. Register the node in `AgentGraphConfig` and wire it into the graph edges.
+4. Add the corresponding output field to `AegisState`.
+
+Existing agents do not change. The graph configuration is the single point of topology control.
+
+### Adding a New Tool
+
+1. Implement a Spring `@Component` that returns deterministic JSON.
+2. Reference it from any agent's node action.
+
+No framework modifications. No interface contracts beyond returning structured data.
+
+### Swapping the LLM Provider
+
+The LLM backend is configured via `application.yml` and a single Spring auto-configuration class. Switching from Ollama to OpenAI, Anthropic, or any LangChain4j-supported provider requires:
+
+1. Swap the Maven dependency (one line in `pom.xml`).
+2. Update `application.yml` with the new provider's configuration block.
+
+All agents consume a `ChatLanguageModel` bean — they are unaware of which provider backs it.
+
+### Changing the Graph Topology
+
+The graph is defined declaratively in `AgentGraphConfig`. Edges, conditional branches, and node ordering are modified in a single file. This supports:
+
+- Inserting agents between existing nodes
+- Adding parallel branches
+- Replacing the reflection strategy (e.g., per-node critics instead of a global critic)
+- Removing agents without cascading changes
+
+---
+
+## Scaling Considerations
+
+| Concern               | Current Approach            | Path to Scale                                                                                                               |
+| --------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Concurrency**       | Single-threaded per request | LangGraph4j supports async node actions; agents on independent branches can execute in parallel                             |
+| **Statelessness**     | Request-scoped `AegisState` | No server-side session; horizontally scalable behind a load balancer                                                        |
+| **LLM latency**       | Synchronous calls           | SSE streaming already decouples client wait; async agent execution reduces wall-clock time                                  |
+| **Model flexibility** | Single model for all agents | Each agent can be wired to a different `ChatLanguageModel` bean (e.g., fast model for Planner, large model for Synthesizer) |
+| **Persistence**       | In-memory                   | State can be serialized to PostgreSQL or Redis for audit trails and resumable workflows                                     |
+| **Evaluation**        | On-demand via `/eval`       | Integrates with CI pipelines; dataset is stored as JSON and is trivially extensible                                         |
+
+---
+
+## Design Principles
+
+1. **Separation of concerns.** Each agent has a single responsibility. Agents do not know about each other — they communicate exclusively through typed shared state.
+2. **Graph over chain.** Conditional routing and bounded loops are first-class constructs, not workarounds bolted onto a linear pipeline.
+3. **Determinism where it matters.** LLMs handle reasoning; tools handle facts. The boundary is explicit and enforced.
+4. **Validate everything.** No agent output enters shared state without passing schema validation. Malformed responses are caught immediately, not downstream.
+5. **Provider agnosticism.** The system runs on Ollama, OpenAI, Anthropic, or any LangChain4j-compatible backend. Agents are decoupled from the model layer.
+6. **Extend, don't modify.** Adding agents, tools, or providers requires new code — not changes to existing code. The architecture follows the open-closed principle.
 
 ---
 
